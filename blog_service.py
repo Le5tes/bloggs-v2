@@ -20,30 +20,51 @@ def get_blog_by_id(blog_id):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
     
-    # Get the blog post
-    response = table.get_item(
-        Key={
-            'id': blog_id
-        }
-    )
+    # Debug information
+    print(f"Fetching blog with ID: '{blog_id}', Type: {type(blog_id)}")
+    print(f"Using table: {table_name}")
     
-    # Return the blog post if found
-    if 'Item' in response:
-        return response['Item']
+    # Ensure blog_id is a string
+    blog_id_str = str(blog_id)
     
-    return None
+    try:
+        # First, we need to find the item's createdAt value
+        # Since we can't query directly by just the partition key,
+        # we'll use a query operation to find the matching item
+        query_response = table.query(
+            KeyConditionExpression='id = :id',
+            ExpressionAttributeValues={
+                ':id': blog_id_str
+            }
+        )
+        
+        # If we found a matching item
+        if query_response['Count'] > 0:
+            # Return the first (should be only) item
+            return query_response['Items'][0]
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"DynamoDB Error: {str(e)}")
+        raise
 
-def get_blogs_by_date_range(start_date, end_date):
+def filter_blogs(filters=None):
     """
-    Retrieve multiple blog posts within a date range from DynamoDB
+    Flexible function to retrieve blog posts based on different filters
     
     Args:
-        start_date (str): The start date in ISO format (YYYY-MM-DD)
-        end_date (str): The end date in ISO format (YYYY-MM-DD)
-        
+        filters (dict): A dictionary of filters to apply to the query
+                        Possible filters:
+                        - journey (str): Filter by journey
+                        - start (str): Filter by start date (ISO format)
+                        - end (str): Filter by end date (ISO format)
+                        
     Returns:
-        list: A list of blog posts within the date range
+        list: A list of blog posts matching the filters
     """
+    import datetime
+    
     # Get table name from environment variable
     table_name = os.environ.get('DYNAMODB_TABLE_NAME')
     if not table_name:
@@ -53,21 +74,77 @@ def get_blogs_by_date_range(start_date, end_date):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
     
-    # Convert dates to ISO format if they aren't already
-    # Our test is using simple YYYY-MM-DD format, but our data has full timestamps
-    if 'T' not in start_date:
-        start_date = f"{start_date}T00:00:00Z"
-    if 'T' not in end_date:
-        end_date = f"{end_date}T23:59:59Z"
+    # Validate and normalize filters
+    if filters is None:
+        filters = {}
     
-    # Scan the table for blogs within the date range
-    response = table.scan(
-        FilterExpression="createdAt BETWEEN :start_date AND :end_date",
-        ExpressionAttributeValues={
-            ':start_date': start_date,
-            ':end_date': end_date
-        }
-    )
-    
-    # Return the blogs
-    return response.get('Items', [])
+    # Helper function for timestamp conversion
+    def to_timestamp(date_str):
+        if 'T' in date_str:
+            dt = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            dt = datetime.datetime.fromisoformat(f"{date_str}T00:00:00+00:00")
+        return int(dt.timestamp() * 1000)  # Convert to milliseconds
+        
+    try:
+        # Set up base parameters for query or scan
+        expression_values = {}
+        filter_expressions = []
+        
+        # Process date filters
+        if 'start' in filters:
+            start_timestamp = to_timestamp(filters['start'])
+            print(f"Converted {filters['start']} to {start_timestamp}")
+            filter_expressions.append('createdAt >= :start')
+            expression_values[':start'] = start_timestamp
+            
+        if 'end' in filters:
+            # Handle end (use end of day if no time part)
+            end_str = filters['end'] 
+            end_timestamp = to_timestamp(end_str) if 'T' in end_str else to_timestamp(f"{end_str}T23:59:59")
+            print(f"Converted {filters['end']} to {end_timestamp}")
+            filter_expressions.append('createdAt <= :end')
+            expression_values[':end'] = end_timestamp
+        
+        # Determine query approach based on filters
+        if 'journey' in filters:
+            # Use GSI query for journey
+            query_params = {
+                'IndexName': 'journey',
+                'KeyConditionExpression': 'journey = :journey_val',
+                'ExpressionAttributeValues': {
+                    ':journey_val': filters['journey'],
+                    **expression_values
+                }
+            }
+            
+            # Add date filters if present
+            if filter_expressions:
+                query_params['FilterExpression'] = ' AND '.join(filter_expressions)
+                
+            print(f"Executing query with params: {query_params}")
+            response = table.query(**query_params)
+            
+        elif filter_expressions:
+            # Use scan with filter expressions for date-only filters
+            scan_params = {
+                'FilterExpression': ' AND '.join(filter_expressions),
+                'ExpressionAttributeValues': expression_values
+            }
+            
+            print(f"Executing scan with params: {scan_params}")
+            response = table.scan(**scan_params)
+            
+        else:
+            # No filters, return all items
+            print("No filters specified, returning all items")
+            response = table.scan()
+        
+        print(f"Found {response['Count']} blogs matching filters")
+        return response.get('Items', [])
+            
+    except Exception as e:
+        print(f"Error in filter_blogs: {str(e)}")
+        raise
+
+

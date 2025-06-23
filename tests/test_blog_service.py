@@ -120,13 +120,13 @@ def test_get_blog_by_id_not_found(dynamodb_resource, setup_blogs_table):
     assert result is None
 
 @pytest.fixture
-def setup_blogs_table_with_multiple_entries(dynamodb_resource):
-    """Create a mock DynamoDB table with multiple blog posts for date range testing."""
+def setup_blogs_table_for_filtering(dynamodb_resource):
+    """Create a mock DynamoDB table with multiple blog posts for flexible filtering testing."""
     # Set up the environment variable for the table name
     table_name = 'test-blogs-table'
     os.environ['DYNAMODB_TABLE_NAME'] = table_name
     
-    # Create the test table
+    # Create the test table with a GSI for journey
     table = dynamodb_resource.create_table(
         TableName=table_name,
         KeySchema=[
@@ -134,13 +134,13 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
         ],
         AttributeDefinitions=[
             {'AttributeName': 'id', 'AttributeType': 'S'},
-            {'AttributeName': 'createdAt', 'AttributeType': 'S'},
+            {'AttributeName': 'journey', 'AttributeType': 'S'},
         ],
         GlobalSecondaryIndexes=[
             {
-                'IndexName': 'createdAt-index',
+                'IndexName': 'journey',  # GSI for journey
                 'KeySchema': [
-                    {'AttributeName': 'createdAt', 'KeyType': 'HASH'},
+                    {'AttributeName': 'journey', 'KeyType': 'HASH'},
                 ],
                 'Projection': {'ProjectionType': 'ALL'},
                 'ProvisionedThroughput': {
@@ -152,7 +152,7 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
         ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
     )
     
-    # Add multiple blog posts with different dates
+    # Add multiple blog posts with different journeys and dates
     blog_posts = [
         {
             'id': '123',
@@ -160,9 +160,9 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
             'body': 'Content for blog post 1',
             'description': 'Summary for blog post 1',
             'username': 'Test Author',
-            'createdAt': '2024-05-15T10:00:00Z',
-            'journey': 'test-journey',
-            'tags': ['test', 'blog'],
+            'createdAt': 1715318400000,  # 2024-05-10
+            'journey': 'europe',
+            'tags': ['travel', 'europe'],
             'image': 'image1.png'
         },
         {
@@ -171,9 +171,9 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
             'body': 'Content for blog post 2',
             'description': 'Summary for blog post 2',
             'username': 'Test Author',
-            'createdAt': '2024-06-01T14:00:00Z',
-            'journey': 'test-journey',
-            'tags': ['test', 'blog'],
+            'createdAt': 1717396800000,  # 2024-06-03
+            'journey': 'europe',
+            'tags': ['travel', 'food'],
             'image': 'image2.png'
         },
         {
@@ -182,9 +182,9 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
             'body': 'Content for blog post 3',
             'description': 'Summary for blog post 3',
             'username': 'Another Author',
-            'createdAt': '2024-06-20T09:30:00Z',
-            'journey': 'another-journey',
-            'tags': ['blog'],
+            'createdAt': 1720588800000,  # 2024-07-10
+            'journey': 'asia',
+            'tags': ['travel', 'asia'],
             'image': 'image3.png'
         },
         {
@@ -193,10 +193,21 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
             'body': 'Content for blog post 4',
             'description': 'Summary for blog post 4',
             'username': 'Another Author',
-            'createdAt': '2024-07-05T16:45:00Z',
-            'journey': 'another-journey',
-            'tags': ['test'],
+            'createdAt': 1722576000000,  # 2024-08-02
+            'journey': 'asia',
+            'tags': ['travel', 'food'],
             'image': 'image4.png'
+        },
+        {
+            'id': '127',
+            'title': 'Blog Post 5',
+            'body': 'Content for blog post 5',
+            'description': 'Summary for blog post 5',
+            'username': 'Third Author',
+            'createdAt': 1723267200000,  # 2024-08-10
+            'journey': 'africa',
+            'tags': ['travel', 'africa'],
+            'image': 'image5.png'
         }
     ]
     
@@ -205,25 +216,112 @@ def setup_blogs_table_with_multiple_entries(dynamodb_resource):
     
     return table_name, blog_posts
 
-def test_get_blogs_by_date_range(dynamodb_resource, setup_blogs_table_with_multiple_entries):
-    """Test retrieving blogs within a date range."""
-    table_name, blog_posts = setup_blogs_table_with_multiple_entries
+def test_filter_blogs_by_journey(dynamodb_resource, setup_blogs_table_for_filtering):
+    """Test filtering blogs by journey."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
     
     # Import the module after environment variables are set
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     import blog_service
     
-    # Call the function with a date range that should include 2 blog posts
-    result = blog_service.get_blogs_by_date_range('2024-06-01', '2024-06-30')
+    # Call the function with a filter for 'europe' journey
+    result = blog_service.filter_blogs({'journey': 'europe'})
     
     # Assertions
     assert result is not None
     assert isinstance(result, list)
     assert len(result) == 2
     
-    # Check that we got the right blog posts (ids 124 and 125)
+    # Check that we got the right blog posts (ids 123 and 124)
     result_ids = [post['id'] for post in result]
+    assert '123' in result_ids
     assert '124' in result_ids
-    assert '125' in result_ids
-    assert '123' not in result_ids
-    assert '126' not in result_ids
+    assert '125' not in result_ids  # asia
+    assert '126' not in result_ids  # asia
+    assert '127' not in result_ids  # africa
+    
+    # Check specific values to confirm we have the correct data
+    for post in result:
+        assert post['journey'] == 'europe'
+        assert 'travel' in post['tags']
+
+def test_filter_blogs_by_date_range(dynamodb_resource, setup_blogs_table_for_filtering):
+    """Test filtering blogs by date range."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
+    
+    # Import the module after environment variables are set
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    import blog_service
+    
+    # Call the function with a date range filter (June-July 2024)
+    result = blog_service.filter_blogs({
+        'start': '2024-06-01',
+        'end': '2024-07-31'
+    })
+    
+    # Assertions
+    assert result is not None
+    assert isinstance(result, list)
+    assert len(result) == 2
+    
+    # Check that we got the right blog posts (ids 124, 125)
+    result_ids = [post['id'] for post in result]
+    assert '123' not in result_ids  # May 10
+    assert '124' in result_ids      # June 3
+    assert '125' in result_ids      # July 10
+    assert '126' not in result_ids  # August 2 (outside range)
+    assert '127' not in result_ids  # August 10
+
+def test_filter_blogs_by_journey_and_date_range(dynamodb_resource, setup_blogs_table_for_filtering):
+    """Test filtering blogs by both journey and date range."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
+    
+    # Import the module after environment variables are set
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    import blog_service
+    
+    # Call the function with both journey and date range filters
+    result = blog_service.filter_blogs({
+        'journey': 'asia',
+        'start': '2024-07-01',
+        'end': '2024-08-05'
+    })
+    
+    # Assertions
+    assert result is not None
+    assert isinstance(result, list)
+    assert len(result) == 2
+    
+    # Check that we got the right blog posts (ids 125 and 126)
+    result_ids = [post['id'] for post in result]
+    assert '123' not in result_ids  # europe, May
+    assert '124' not in result_ids  # europe, June
+    assert '125' in result_ids      # asia, July 10
+    assert '126' in result_ids      # asia, August 2
+    assert '127' not in result_ids  # africa, August 10
+    
+    # Check specific values to confirm we have the correct data
+    for post in result:
+        assert post['journey'] == 'asia'
+
+def test_filter_blogs_no_filters(dynamodb_resource, setup_blogs_table_for_filtering):
+    """Test filtering blogs with no filters (should return all blogs)."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
+    
+    # Import the module after environment variables are set
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    import blog_service
+    
+    # Call the function with no filters
+    result = blog_service.filter_blogs({})
+    
+    # Assertions
+    assert result is not None
+    assert isinstance(result, list)
+    assert len(result) == 5  # Should return all 5 blogs
+    
+    # Another test with None as parameter
+    result_none = blog_service.filter_blogs(None)
+    assert result_none is not None
+    assert isinstance(result_none, list)
+    assert len(result_none) == 5  # Should also return all 5 blogs

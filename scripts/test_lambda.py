@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Set required environment variables for testing
 os.environ['S3_BUCKET_NAME'] = 'lestes-tech-media-store'
+os.environ['DYNAMODB_TABLE_NAME'] = 'bloggs'
 
 # Import the Lambda handler after setting environment variables
 from lambda_function import lambda_handler
@@ -67,10 +68,10 @@ def test_get_blog_by_id():
     """
     Test getting a blog by ID
     """
-    print("\nTesting GET /blogs/123")
+    print("\nTesting GET /blogs/c5263d45-370b-4be9-8d9f-1e0971bd34a2")
     event = create_api_event(
-        path='/blogs/123',
-        path_params={'id': '123'}
+        path='/blogs/c5263d45-370b-4be9-8d9f-1e0971bd34a2',
+        path_params={'id': 'c5263d45-370b-4be9-8d9f-1e0971bd34a2'}
     )
     response = lambda_handler(event, {})
     print_response(response)

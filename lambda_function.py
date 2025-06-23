@@ -22,11 +22,10 @@ def lambda_handler(event, context):
                 if blog:
                     return format_response(200, blog)
                 return format_response(404, {'error': 'Blog not found'})
-            # Get blogs by date range
+            # Get blogs with filters (date range and/or journey)
             else:
-                start_date = query_parameters.get('start')
-                end_date = query_parameters.get('end')
-                blogs = blog_service.get_blogs_by_date_range(start_date, end_date)
+                blogs = blog_service.filter_blogs(query_parameters)
+                    
                 return format_response(200, blogs)
     
     elif path.startswith('/images'):

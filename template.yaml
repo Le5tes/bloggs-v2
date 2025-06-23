@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Bloggs API v2 - Serverless blogging API with Lambda and API Gateway
+
+# Parameters that can be overridden at deploy time
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, staging, prod)
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket where blog images are stored
+  DynamoDBTableName:
+    Type: String
+    Description: Name of the DynamoDB table where blogs are stored
+
+# Global settings for all functions
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.10
+    MemorySize: 256
+    Environment:
+      Variables:
+        S3_BUCKET_NAME: !Ref S3BucketName
+        DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+
+Resources:
+  # Main API Gateway resource
+  BlogsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Auth:
+        DefaultAuthorizer: NONE
+        ApiKeyRequired: false
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # Lambda function for the blog API
+  BlogsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda_function.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+        - S3ReadPolicy:
+            BucketName: !Ref S3BucketName
+      Events:
+        # Get a blog by ID
+        GetBlogById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogsApi
+            Path: /blogs/{id}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        
+        # Get blogs by date range
+        GetBlogsByDate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogsApi
+            Path: /blogs
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        
+        # Get image by filename
+        GetImageByFilename:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogsApi
+            Path: /images/{filename}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+Outputs:
+  ApiUrl:
+    Description: URL of your API endpoint
+    Value: !Sub https://${BlogsApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+  FunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt BlogsFunction.Arn

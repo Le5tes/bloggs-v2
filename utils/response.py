@@ -8,15 +8,19 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj) if obj % 1 != 0 else int(obj)
         return super(DecimalEncoder, self).default(obj)
 
-def format_response(status_code, body):
+def format_response(status_code, body, to_json=True):
     """
     Format the API Gateway response
     """
+    if to_json:
+        body = json.dumps(body, cls=DecimalEncoder)
+
     return {
         'statusCode': status_code,
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'  # CORS support
         },
-        'body': json.dumps(body, cls=DecimalEncoder)
+        'body': body
     }
+

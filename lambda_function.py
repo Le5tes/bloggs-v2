@@ -33,7 +33,7 @@ def lambda_handler(event, context):
             filename = path_parameters['filename']
             image = image_service.get_image_by_filename(filename)
             if image:
-                return format_response(200, image)
+                return format_response(303, image['url'], to_json=False)
             return format_response(404, {'error': 'Image not found'})
     
     # Default response for unhandled routes

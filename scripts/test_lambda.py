@@ -91,6 +91,36 @@ def test_get_blogs_by_date():
     response = lambda_handler(event, {})
     print_response(response)
 
+def test_get_blogs_by_journey():
+    """
+    Test getting blogs by journey
+    """
+    print("\nTesting GET /blogs?journey=europe")
+    event = create_api_event(
+        path='/blogs',
+        query_params={
+            'journey': 'europe'
+        }
+    )
+    response = lambda_handler(event, {})
+    print_response(response)
+
+def test_get_blogs_by_journey_and_date():
+    """
+    Test getting blogs by journey and date range
+    """
+    print("\nTesting GET /blogs?journey=europe&start=2024-01-01&end=2024-12-31")
+    event = create_api_event(
+        path='/blogs',
+        query_params={
+            'journey': 'europe',
+            'start': '2024-01-01',
+            'end': '2024-12-31'
+        }
+    )
+    response = lambda_handler(event, {})
+    print_response(response)
+
 def main():
     """
     Run all tests
@@ -101,6 +131,8 @@ def main():
     test_get_image()
     test_get_blog_by_id()
     test_get_blogs_by_date()
+    test_get_blogs_by_journey()
+    test_get_blogs_by_journey_and_date()
     
     print("=== Test Harness Complete ===")
 

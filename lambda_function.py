@@ -1,5 +1,5 @@
 import json
-from utils.response import format_response
+from utils.response import format_response, redirect
 import blog_service
 import image_service
 
@@ -33,7 +33,7 @@ def lambda_handler(event, context):
             filename = path_parameters['filename']
             image = image_service.get_image_by_filename(filename)
             if image:
-                return format_response(303, image['url'], to_json=False)
+                return redirect(303, image['url'])
             return format_response(404, {'error': 'Image not found'})
     
     # Default response for unhandled routes

@@ -244,6 +244,8 @@ def test_filter_blogs_by_journey(dynamodb_resource, setup_blogs_table_for_filter
     for post in result:
         assert post['journey'] == 'europe'
         assert 'travel' in post['tags']
+        # Verify that body field is excluded for performance
+        assert 'body' not in post
 
 def test_filter_blogs_by_date_range(dynamodb_resource, setup_blogs_table_for_filtering):
     """Test filtering blogs by date range."""

@@ -97,10 +97,14 @@ def filter_blogs(filters=None):
             filter_expressions.append('createdAt <= :end')
             expression_values[':end'] = end_timestamp
         
+        # Define projection expression to exclude body field
+        projection_expression = 'id, title, description, journey, tags, image, createdAt, username'
+        
         if 'journey' in filters:
             query_params = {
                 'IndexName': 'journey',
                 'KeyConditionExpression': 'journey = :journey_val',
+                'ProjectionExpression': projection_expression,
                 'ExpressionAttributeValues': {
                     ':journey_val': filters['journey'],
                     **expression_values
@@ -116,6 +120,7 @@ def filter_blogs(filters=None):
         elif filter_expressions:
             scan_params = {
                 'FilterExpression': ' AND '.join(filter_expressions),
+                'ProjectionExpression': projection_expression,
                 'ExpressionAttributeValues': expression_values
             }
             
@@ -124,7 +129,7 @@ def filter_blogs(filters=None):
             
         else:
             print("No filters specified, returning all items")
-            response = table.scan()
+            response = table.scan(ProjectionExpression=projection_expression)
         
         print(f"Found {response['Count']} blogs matching filters")
         return response.get('Items', [])

@@ -19,7 +19,7 @@ os.environ['DYNAMODB_TABLE_NAME'] = 'bloggs'
 # Import the Lambda handler after setting environment variables
 from lambda_function import lambda_handler
 
-def create_api_event(path, http_method='GET', path_params=None, query_params=None):
+def create_api_event(path, http_method='GET', path_params=None, query_params=None, body=None, headers=None):
     """
     Create a mock API Gateway event
     """
@@ -28,10 +28,11 @@ def create_api_event(path, http_method='GET', path_params=None, query_params=Non
         'path': path,
         'pathParameters': path_params or {},
         'queryStringParameters': query_params or {},
-        'headers': {
+        'headers': headers or {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
-        }
+        },
+        'body': body
     }
     return event
 
@@ -121,6 +122,28 @@ def test_get_blogs_by_journey_and_date():
     response = lambda_handler(event, {})
     print_response(response)
 
+def test_post_blog_unauthenticated():
+    """
+    Test posting a blog without authentication (should fail)
+    """
+    print("\nTesting POST /blogs (no auth)")
+    blog_data = {
+        'title': 'Test Blog Post',
+        'body': 'This is a test blog post body.',
+        'description': 'Test description',
+        'journey': 'test-journey',
+        'tags': ['test', 'integration'],
+        'image': 'test-image.png'
+    }
+    
+    event = create_api_event(
+        path='/blogs',
+        http_method='POST',
+        body=json.dumps(blog_data)
+    )
+    response = lambda_handler(event, {})
+    print_response(response)
+
 def main():
     """
     Run all tests
@@ -133,6 +156,7 @@ def main():
     test_get_blogs_by_date()
     test_get_blogs_by_journey()
     test_get_blogs_by_journey_and_date()
+    test_post_blog_unauthenticated()
     
     print("=== Test Harness Complete ===")
 

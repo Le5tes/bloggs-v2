@@ -33,7 +33,6 @@ Resources:
     Properties:
       StageName: !Ref Stage
       Auth:
-        DefaultAuthorizer: NONE
         ApiKeyRequired: false
         Authorizers:
           CognitoAuth:
@@ -52,6 +51,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref DynamoDBTableName
+        - DynamoDBWritePolicy:
+            TableName: !Ref DynamoDBTableName
         - S3ReadPolicy:
             BucketName: !Ref S3BucketName
       Events:
@@ -62,8 +63,6 @@ Resources:
             RestApiId: !Ref BlogsApi
             Path: /blogs/{id}
             Method: GET
-            Auth:
-              Authorizer: NONE
         
         # Get blogs by date range
         GetBlogsByDate:
@@ -72,8 +71,16 @@ Resources:
             RestApiId: !Ref BlogsApi
             Path: /blogs
             Method: GET
+        
+        # Create a new blog post
+        PostBlog:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogsApi
+            Path: /blogs
+            Method: POST
             Auth:
-              Authorizer: NONE
+              Authorizer: CognitoAuth
         
         # Get image by filename
         GetImageByFilename:
@@ -82,8 +89,6 @@ Resources:
             RestApiId: !Ref BlogsApi
             Path: /images/{filename}
             Method: GET
-            Auth:
-              Authorizer: NONE
 
 Outputs:
   ApiUrl:

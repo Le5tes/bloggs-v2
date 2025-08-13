@@ -27,6 +27,38 @@ def lambda_handler(event, context):
                 blogs = blog_service.filter_blogs(query_parameters)
                     
                 return format_response(200, blogs)
+        
+        elif http_method == 'POST':
+            # Create a new blog post (requires authentication)
+            try:
+                # Extract the authorization token from headers
+                headers = event.get('headers', {})
+                auth_header = headers.get('Authorization') or headers.get('authorization')
+                
+                if not auth_header or not auth_header.startswith('Bearer '):
+                    return format_response(401, {'error': 'Missing or invalid authorization header'})
+                
+                token = auth_header.split(' ')[1]
+                
+                # Parse the request body
+                body = event.get('body', '{}')
+                if isinstance(body, str):
+                    blog_data = json.loads(body)
+                else:
+                    blog_data = body
+                
+                # Post the blog
+                blog_service.post_blog(blog_data, token)
+                
+                return format_response(201, {'message': 'Blog created successfully'})
+                
+            except ValueError as e:
+                # Authentication or validation error
+                return format_response(401, {'error': str(e)})
+            except json.JSONDecodeError:
+                return format_response(400, {'error': 'Invalid JSON in request body'})
+            except Exception as e:
+                return format_response(500, {'error': 'Internal server error'})
     
     elif path.startswith('/images'):
         if http_method == 'GET' and 'filename' in path_parameters:

@@ -1,3 +1,4 @@
+import uuid
 import boto3
 import os
 
@@ -11,16 +12,13 @@ def get_blog_by_id(blog_id):
     Returns:
         dict: The blog post data or None if not found
     """
-    # Get table name from environment variable
     table_name = os.environ.get('DYNAMODB_TABLE_NAME')
     if not table_name:
         raise ValueError("DYNAMODB_TABLE_NAME environment variable must be set")
     
-    # Create DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
     
-    # Debug information
     print(f"Fetching blog with ID: '{blog_id}', Type: {type(blog_id)}")
     print(f"Using table: {table_name}")
     
@@ -65,20 +63,16 @@ def filter_blogs(filters=None):
     """
     import datetime
     
-    # Get table name from environment variable
     table_name = os.environ.get('DYNAMODB_TABLE_NAME')
     if not table_name:
         raise ValueError("DYNAMODB_TABLE_NAME environment variable must be set")
     
-    # Create DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
     
-    # Validate and normalize filters
     if filters is None:
         filters = {}
     
-    # Helper function for timestamp conversion
     def to_timestamp(date_str):
         if 'T' in date_str:
             dt = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
@@ -87,11 +81,9 @@ def filter_blogs(filters=None):
         return int(dt.timestamp() * 1000)  # Convert to milliseconds
         
     try:
-        # Set up base parameters for query or scan
         expression_values = {}
         filter_expressions = []
         
-        # Process date filters
         if 'start' in filters:
             start_timestamp = to_timestamp(filters['start'])
             print(f"Converted {filters['start']} to {start_timestamp}")
@@ -99,16 +91,13 @@ def filter_blogs(filters=None):
             expression_values[':start'] = start_timestamp
             
         if 'end' in filters:
-            # Handle end (use end of day if no time part)
             end_str = filters['end'] 
             end_timestamp = to_timestamp(end_str) if 'T' in end_str else to_timestamp(f"{end_str}T23:59:59")
             print(f"Converted {filters['end']} to {end_timestamp}")
             filter_expressions.append('createdAt <= :end')
             expression_values[':end'] = end_timestamp
         
-        # Determine query approach based on filters
         if 'journey' in filters:
-            # Use GSI query for journey
             query_params = {
                 'IndexName': 'journey',
                 'KeyConditionExpression': 'journey = :journey_val',
@@ -118,7 +107,6 @@ def filter_blogs(filters=None):
                 }
             }
             
-            # Add date filters if present
             if filter_expressions:
                 query_params['FilterExpression'] = ' AND '.join(filter_expressions)
                 
@@ -126,7 +114,6 @@ def filter_blogs(filters=None):
             response = table.query(**query_params)
             
         elif filter_expressions:
-            # Use scan with filter expressions for date-only filters
             scan_params = {
                 'FilterExpression': ' AND '.join(filter_expressions),
                 'ExpressionAttributeValues': expression_values
@@ -136,7 +123,6 @@ def filter_blogs(filters=None):
             response = table.scan(**scan_params)
             
         else:
-            # No filters, return all items
             print("No filters specified, returning all items")
             response = table.scan()
         
@@ -147,4 +133,25 @@ def filter_blogs(filters=None):
         print(f"Error in filter_blogs: {str(e)}")
         raise
 
+def post_blog(blog, token):
+    import datetime
+    import uuid
+    from utils.auth import CognitoAuth
+    
+    auth = CognitoAuth(user_pool_id="eu-west-2_hidczk")
+    user_payload = auth.verify_token(token)
+    
+    if not user_payload:
+        raise ValueError("Invalid or missing authentication token")
 
+    table_name = os.environ.get('DYNAMODB_TABLE_NAME')
+    if not table_name:
+        raise ValueError("DYNAMODB_TABLE_NAME environment variable must be set")
+    
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(table_name)
+
+    blog['id'] = str(uuid.uuid4())
+    blog['createdAt'] = int(datetime.datetime.now().timestamp())
+
+    table.put_item(Item=blog)

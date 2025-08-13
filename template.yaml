@@ -35,8 +35,11 @@ Resources:
       Auth:
         DefaultAuthorizer: NONE
         ApiKeyRequired: false
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/eu-west-2_cQ400Klmr"
       Cors:
-        AllowMethods: "'GET,OPTIONS'"
+        AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
         AllowOrigin: "'*'"
 

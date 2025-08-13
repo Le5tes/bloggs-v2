@@ -325,3 +325,89 @@ def test_filter_blogs_no_filters(dynamodb_resource, setup_blogs_table_for_filter
     assert result_none is not None
     assert isinstance(result_none, list)
     assert len(result_none) == 5  # Should also return all 5 blogs
+
+def test_post_blog_authenticated(dynamodb_resource, setup_blogs_table_for_filtering, mocker):
+    """Test posting a blog with valid authentication (happy path)."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
+    
+    valid_token = "dummy.jwt.token"
+    
+    mocker.patch('utils.auth.CognitoAuth.verify_token', return_value={
+        'sub': 'user-123',
+        'email': 'testuser@example.com',
+        'username': 'testuser'
+    })
+    
+    new_blog = {
+        'title': 'New Blog Post',
+        'body': 'This is the body of the new blog.',
+        'description': 'A short description.',
+        'journey': 'europe',
+        'tags': ['travel', 'europe'],
+        'image': 'new-image.png'
+    }
+    
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    import blog_service
+    
+    # Get the table and mock its put_item method
+    table = dynamodb_resource.Table(table_name)
+    mock_put_item = mocker.patch.object(table, 'put_item')
+    
+    # Mock boto3.resource to return our test dynamodb_resource
+    # and make sure Table() returns our mocked table
+    mock_dynamodb_resource = mocker.MagicMock()
+    mock_dynamodb_resource.Table.return_value = table
+    mock_boto3_resource = mocker.patch('blog_service.boto3.resource', return_value=mock_dynamodb_resource)
+    
+    # Call the function to post a blog (to be implemented)
+    blog_service.post_blog(new_blog, token=valid_token)
+    
+    # Assertions - check that put_item was called with the blog data
+    mock_put_item.assert_called_once()
+    put_item_args = mock_put_item.call_args[1]['Item']
+    
+    assert put_item_args['title'] == new_blog['title']
+    assert put_item_args['body'] == new_blog['body']
+    assert put_item_args['journey'] == new_blog['journey']
+    assert put_item_args['tags'] == new_blog['tags']
+    assert put_item_args['image'] == new_blog['image']
+    assert 'id' in put_item_args
+    assert 'createdAt' in put_item_args
+
+def test_post_blog_unauthenticated(dynamodb_resource, setup_blogs_table_for_filtering, mocker):
+    """Test posting a blog with invalid authentication (should fail)."""
+    table_name, blog_posts = setup_blogs_table_for_filtering
+    
+    invalid_token = "invalid.jwt.token"
+    
+    # Mock the CognitoAuth.verify_token to return None (invalid token)
+    mocker.patch('utils.auth.CognitoAuth.verify_token', return_value=None)
+    
+    new_blog = {
+        'title': 'New Blog Post',
+        'body': 'This is the body of the new blog.',
+        'description': 'A short description.',
+        'journey': 'europe',
+        'tags': ['travel', 'europe'],
+        'image': 'new-image.png'
+    }
+    
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    import blog_service
+    
+    # Get the table and mock its put_item method
+    table = dynamodb_resource.Table(table_name)
+    mock_put_item = mocker.patch.object(table, 'put_item')
+    
+    # Mock boto3.resource to return our test dynamodb_resource
+    mock_dynamodb_resource = mocker.MagicMock()
+    mock_dynamodb_resource.Table.return_value = table
+    mock_boto3_resource = mocker.patch('blog_service.boto3.resource', return_value=mock_dynamodb_resource)
+    
+    # Call the function with invalid token - should raise an exception
+    with pytest.raises(ValueError, match="Invalid or missing authentication token"):
+        blog_service.post_blog(new_blog, token=invalid_token)
+    
+    # Assertions - check that put_item was NOT called since authentication failed
+    mock_put_item.assert_not_called()
